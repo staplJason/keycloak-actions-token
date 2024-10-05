@@ -1,7 +1,7 @@
 
 # Keycloak actions token
 
-This extension exposes a custom realm resource to manage action tokens in keycloak.
+This extension exposes a custom realm resource to manage action tokens in Keycloak.
 
 ## Build the example
 ```
@@ -10,9 +10,9 @@ mvn clean verify
 
 ## Deploy the example
 ### Wildfly
-Copy the `.jar` into the keycloak directory `standalone/deployments`
+Copy the `.jar` into the Keycloak directory `standalone/deployments`
 ### Quarkus
-Copy the `.jar` into the keycloak directory `providers`
+Copy the `.jar` into the Keycloak directory `providers`
 
 ## Routes
 
