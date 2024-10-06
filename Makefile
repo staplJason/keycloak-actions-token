@@ -5,4 +5,4 @@ build-jar:
 		maven:3.9.7-eclipse-temurin-21 \
 		bash -c "cd /home/app && mvn clean verify"
 
-# cp target/actions-token-0.0.9.jar ~/dev/deployit/deploystack/keycloak/providers
+# cp target/actions-token-0.0.10.jar ~/dev/deployit/deploystack/keycloak/providers
