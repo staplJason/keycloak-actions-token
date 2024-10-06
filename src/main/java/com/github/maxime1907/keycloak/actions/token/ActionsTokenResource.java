@@ -43,6 +43,10 @@ import org.keycloak.services.resources.admin.AdminAuth;
 import org.keycloak.services.resources.admin.permissions.AdminPermissionEvaluator;
 import org.keycloak.services.resources.admin.permissions.AdminPermissions;
 
+import org.keycloak.models.RequiredActionProviderModel;
+import java.util.stream.Collectors;
+// import java.util.List;
+
 import com.google.gson.Gson;
 
 public class ActionsTokenResource {
@@ -63,16 +67,17 @@ public class ActionsTokenResource {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public Response getActionToken(
-        String jsonString,
-        @Context UriInfo uriInfo) {
+            String jsonString) {
         KeycloakContext context = session.getContext();
-
+        //pull uriInfor from active context (in case behind proxy)
+        UriInfo uriInfo = context.getUri();
         RealmModel realm = session.getContext().getRealm();
 
         AdminAuth auth = authenticateRealmAdminRequest(context.getRequestHeaders());
 
         RealmManager realmManager = new RealmManager(session);
-        if (realm == null) throw new NotFoundException("Realm not found.");
+        if (realm == null)
+            throw new NotFoundException("Realm not found.");
 
         if (!auth.getRealm().equals(realmManager.getKeycloakAdminstrationRealm())
                 && !auth.getRealm().equals(realm)) {
@@ -89,7 +94,7 @@ public class ActionsTokenResource {
             actionTokenRequest = gson.fromJson(jsonString, ActionTokenRequest.class);
         } catch (IllegalArgumentException cause) {
             throw new WebApplicationException(
-                ErrorResponse.error("Invalid json input.", Status.BAD_REQUEST));
+                    ErrorResponse.error("Invalid json input.", Status.BAD_REQUEST));
         }
 
         UserModel user = session.users().getUserById(realm, actionTokenRequest.userId);
@@ -101,36 +106,39 @@ public class ActionsTokenResource {
                 throw new ForbiddenException();
         }
 
+        // Fetch all registered required actions in the realm
+        List<String> registeredRequiredActions = realm.getRequiredActionProvidersStream()
+                .map(RequiredActionProviderModel::getAlias)
+                .collect(Collectors.toList());
+
         // Can parameterize this as well
         List<String> requiredActions = new LinkedList<String>();
 
-        try {
-            for (int i = 0; i < actionTokenRequest.actions.size(); i++) {
-                String requiredActionName = actionTokenRequest.actions.get(i);
-                RequiredAction requiredAction = RequiredAction.valueOf(requiredActionName);
-                requiredActions.add(requiredAction.name());
+        // Validate the required actions from the request
+        for (String requiredActionName : actionTokenRequest.actions) {
+            if (!registeredRequiredActions.contains(requiredActionName)) {
+                throw new WebApplicationException(
+                        ErrorResponse.error("Invalid requiredAction: " + requiredActionName, Status.BAD_REQUEST));
             }
-        } catch (IllegalArgumentException cause) {
-            throw new WebApplicationException(
-                ErrorResponse.error("Invalid requiredAction.", Status.BAD_REQUEST));
+            requiredActions.add(requiredActionName); // Add the validated action to the list
         }
 
         realmAuth.users().requireManage(user);
-
-        if (requiredActions.contains(RequiredAction.VERIFY_EMAIL.name()) && user.getEmail() == null)
-        {
+        // Make sure the user has an email address
+        String userEmail = user.getEmail();
+        if (requiredActions.contains(RequiredAction.VERIFY_EMAIL.name()) && userEmail == null) {
             throw new WebApplicationException(
-                ErrorResponse.error("User email missing", Status.BAD_REQUEST));
+                    ErrorResponse.error("User email missing", Status.BAD_REQUEST));
         }
 
         if (!user.isEnabled()) {
             throw new WebApplicationException(
-                ErrorResponse.error("User is disabled", Status.BAD_REQUEST));
+                    ErrorResponse.error("User is disabled", Status.BAD_REQUEST));
         }
 
         if (actionTokenRequest.redirectUri != null && actionTokenRequest.clientId == null) {
             throw new WebApplicationException(
-                ErrorResponse.error("Client id missing", Status.BAD_REQUEST));
+                    ErrorResponse.error("Client id missing", Status.BAD_REQUEST));
         }
 
         if (actionTokenRequest.clientId == null) {
@@ -138,33 +146,34 @@ public class ActionsTokenResource {
         }
 
         ClientModel client = assertValidClient(actionTokenRequest.clientId);
-        if (actionTokenRequest.redirectUri != null && actionTokenRequest.redirectUriValidate != null && actionTokenRequest.redirectUriValidate)
+        if (actionTokenRequest.redirectUri != null && actionTokenRequest.redirectUriValidate != null
+                && actionTokenRequest.redirectUriValidate)
             assertValidRedirectUri(actionTokenRequest.redirectUri, client);
 
-        // /auth/admin/master/console/#/realms/master/token-settings User-Initiated Action Lifespan
+        // /auth/admin/master/console/#/realms/master/token-settings User-Initiated
+        // Action Lifespan
         int validityInSecs = context.getRealm().getActionTokenGeneratedByAdminLifespan();
         if (actionTokenRequest.lifespan != null)
             validityInSecs = actionTokenRequest.lifespan;
         int absoluteExpirationInSecs = Time.currentTime() + validityInSecs;
 
         ExecuteActionsActionToken token = new ExecuteActionsActionToken(
-            actionTokenRequest.userId,
-            absoluteExpirationInSecs,
-            requiredActions,
-            actionTokenRequest.redirectUri,
-            actionTokenRequest.clientId
-        ){
+                actionTokenRequest.userId,
+                absoluteExpirationInSecs,
+                requiredActions,
+                actionTokenRequest.redirectUri,
+                actionTokenRequest.clientId) {
             @Override
             public TokenCategory getCategory() {
                 return TokenCategory.ADMIN;
             }
         };
+        token.setOtherClaims("eml", userEmail);
 
         String tokenKey = token.serialize(
-            session,
-            context.getRealm(),
-            uriInfo
-        );
+                session,
+                context.getRealm(),
+                uriInfo);
 
         Gson gson = new Gson();
         ActionToken actionToken = new ActionToken(tokenKey);
@@ -176,7 +185,7 @@ public class ActionsTokenResource {
         String redirect = RedirectUtils.verifyRedirectUri(session, redirectUri, client);
         if (redirect == null) {
             throw new WebApplicationException(
-                ErrorResponse.error("Invalid redirect uri.", Status.BAD_REQUEST));
+                    ErrorResponse.error("Invalid redirect uri.", Status.BAD_REQUEST));
         }
     }
 
@@ -185,7 +194,7 @@ public class ActionsTokenResource {
         if (client == null) {
             logger.debugf("Client %s doesn't exist", clientId);
             throw new WebApplicationException(
-                ErrorResponse.error("Client doesn't exist", Status.BAD_REQUEST));
+                    ErrorResponse.error("Client doesn't exist", Status.BAD_REQUEST));
         }
         if (!client.isEnabled()) {
             logger.debugf("Client %s is not enabled", clientId);
@@ -197,7 +206,8 @@ public class ActionsTokenResource {
 
     protected AdminAuth authenticateRealmAdminRequest(HttpHeaders headers) {
         String tokenString = AppAuthManager.extractAuthorizationHeaderToken(headers);
-        if (tokenString == null) throw new NotAuthorizedException("Bearer");
+        if (tokenString == null)
+            throw new NotAuthorizedException("Bearer");
         AccessToken token;
         try {
             JWSInput input = new JWSInput(tokenString);
@@ -205,6 +215,7 @@ public class ActionsTokenResource {
         } catch (JWSInputException e) {
             throw new NotAuthorizedException("Bearer token format error");
         }
+
         String realmName = token.getIssuer().substring(token.getIssuer().lastIndexOf('/') + 1);
         RealmManager realmManager = new RealmManager(session);
         RealmModel realm = realmManager.getRealmByName(realmName);
