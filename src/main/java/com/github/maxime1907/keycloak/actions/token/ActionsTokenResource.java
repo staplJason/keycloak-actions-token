@@ -45,7 +45,7 @@ import org.keycloak.services.resources.admin.permissions.AdminPermissions;
 
 import org.keycloak.models.RequiredActionProviderModel;
 import java.util.stream.Collectors;
-import java.util.List;
+// import java.util.List;
 
 import com.google.gson.Gson;
 
@@ -67,10 +67,10 @@ public class ActionsTokenResource {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public Response getActionToken(
-            String jsonString,
-            @Context UriInfo uriInfo) {
+            String jsonString) {
         KeycloakContext context = session.getContext();
-
+        //pull uriInfor from active context (in case behind proxy)
+        UriInfo uriInfo = context.getUri();
         RealmModel realm = session.getContext().getRealm();
 
         AdminAuth auth = authenticateRealmAdminRequest(context.getRequestHeaders());
@@ -107,7 +107,7 @@ public class ActionsTokenResource {
         }
 
         // Fetch all registered required actions in the realm
-        List<String> registeredRequiredActions = realm.getRequiredActionsStream()
+        List<String> registeredRequiredActions = realm.getRequiredActionProvidersStream()
                 .map(RequiredActionProviderModel::getAlias)
                 .collect(Collectors.toList());
 
@@ -124,8 +124,9 @@ public class ActionsTokenResource {
         }
 
         realmAuth.users().requireManage(user);
-
-        if (requiredActions.contains(RequiredAction.VERIFY_EMAIL.name()) && user.getEmail() == null) {
+        // Make sure the user has an email address
+        String userEmail = user.getEmail();
+        if (requiredActions.contains(RequiredAction.VERIFY_EMAIL.name()) && userEmail == null) {
             throw new WebApplicationException(
                     ErrorResponse.error("User email missing", Status.BAD_REQUEST));
         }
@@ -167,6 +168,7 @@ public class ActionsTokenResource {
                 return TokenCategory.ADMIN;
             }
         };
+        token.setOtherClaims("eml", userEmail);
 
         String tokenKey = token.serialize(
                 session,
@@ -213,6 +215,7 @@ public class ActionsTokenResource {
         } catch (JWSInputException e) {
             throw new NotAuthorizedException("Bearer token format error");
         }
+
         String realmName = token.getIssuer().substring(token.getIssuer().lastIndexOf('/') + 1);
         RealmManager realmManager = new RealmManager(session);
         RealmModel realm = realmManager.getRealmByName(realmName);
