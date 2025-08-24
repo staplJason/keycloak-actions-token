@@ -89,7 +89,6 @@
               <target>
                 <mkdir />
                 <copy />
-                <copy />
               </target>
             </configuration>
           </execution>

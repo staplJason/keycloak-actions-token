@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project name="maven-antrun-" default="main">
-  <target name="main">
-    <exec output="/home/app/src/release-fullname.txt" executable="echo">
-      <arg value="actions-token-0.0.11.jar" />
-    </exec>
-  </target>
-</project>

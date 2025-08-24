@@ -143,9 +143,6 @@
                                 <mkdir dir="${project.basedir}/build"/>
                                 <copy file="${project.build.directory}/${project.artifactId}-${project.version}.jar"
                                       tofile="${project.basedir}/build/${project.artifactId}-${project.version}.jar"/>
-                                <copy file="${project.basedir}/release-fullname.txt"
-                                      tofile="${project.basedir}/build/release-fullname.txt"
-                                      failonerror="false"/>
                             </target>
                         </configuration>
                     </execution>
