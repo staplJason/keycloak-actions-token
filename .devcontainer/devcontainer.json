@@ -1,0 +1,43 @@
+{
+    "name": "Keycloak Action Token Dev",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "workspaceFolder": "/home/app/src",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "vscjava.vscode-java-pack",
+                "redhat.java",
+                "vscjava.vscode-maven",
+                "vscjava.vscode-java-debug",
+                "vscjava.vscode-java-test",
+                "eamodio.gitlens"
+            ],
+            "settings": {
+                "java.configuration.updateBuildConfiguration": "automatic",
+                "maven.executable.path": "/usr/local/bin/mvn",
+                "java.jdt.ls.java.home": "/opt/java/openjdk"
+            }
+        }
+    },
+    "mounts": [
+        "source=${localWorkspaceFolder}/build,target=/home/app/src/build,type=bind,consistency=cached",
+        "source=${localEnv:HOME}/.ssh,target=/root/.ssh,type=bind,consistency=cached,readOnly=true"
+    ],
+    "runArgs": [
+        "--network=host",
+        "--cap-add=SYS_PTRACE",
+        "-v",
+        "${localEnv:HOME}/.ssh-agent:/run/ssh-agent"
+    ],
+    "portsAttributes": {
+        "5005": {
+            "label": "Java Debug",
+            "onAutoForward": "ignore"
+        }
+    },
+    "postCreateCommand": "mkdir -p /home/app/src/build && export SSH_AUTH_SOCK=/run/ssh-agent && mvn clean install -DskipTests",
+    "remoteUser": "root"
+}

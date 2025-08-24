@@ -7,16 +7,17 @@
     <artifactId>actions-token</artifactId>
     <groupId>io.wiremind.keycloak.actionstoken</groupId>
     <packaging>jar</packaging>
-    <version>0.0.10</version>
+    <version>0.0.11</version>
 
     <properties>
         <java.version>21</java.version>
-        <keycloak.version>25.0.4</keycloak.version>
+        <keycloak.version>26.3.3</keycloak.version>
         <version.compiler.maven.plugin>3.8.1</version.compiler.maven.plugin>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <gson.version>2.10.1</gson.version>
         <resteasy.version>3.12.0</resteasy.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <dependencies>
@@ -51,6 +52,7 @@
             <scope>provided</scope>
         </dependency>
     </dependencies>
+
     <build>
         <resources>
             <resource>
@@ -100,6 +102,54 @@
                         </manifestEntries>
                     </archive>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${version.compiler.maven.plugin}</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <proc>none</proc>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>generate-release-fullname</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <exec executable="echo" output="${project.basedir}/release-fullname.txt">
+                                    <arg value="${project.artifactId}-${project.version}.jar"/>
+                                </exec>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>copy-to-build</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.basedir}/build"/>
+                                <copy file="${project.build.directory}/${project.artifactId}-${project.version}.jar"
+                                      tofile="${project.basedir}/build/${project.artifactId}-${project.version}.jar"/>
+                                <copy file="${project.basedir}/release-fullname.txt"
+                                      tofile="${project.basedir}/build/release-fullname.txt"
+                                      failonerror="false"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

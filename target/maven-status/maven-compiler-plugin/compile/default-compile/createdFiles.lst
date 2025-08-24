@@ -1,0 +1,7 @@
+com/github/maxime1907/keycloak/actions/token/ActionsTokenResource.class
+com/github/maxime1907/keycloak/actions/token/ActionsTokenResourceProviderSPI.class
+com/github/maxime1907/keycloak/actions/token/ActionsTokenResourceProviderFactory.class
+com/github/maxime1907/keycloak/actions/token/ActionTokenRequest.class
+com/github/maxime1907/keycloak/actions/token/ActionsTokenResource$1.class
+com/github/maxime1907/keycloak/actions/token/ActionsTokenResourceProvider.class
+com/github/maxime1907/keycloak/actions/token/ActionToken.class
