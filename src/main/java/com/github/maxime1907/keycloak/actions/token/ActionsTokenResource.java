@@ -1,3 +1,4 @@
+
 package com.github.maxime1907.keycloak.actions.token;
 
 import java.util.LinkedList;
@@ -32,7 +33,6 @@ import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.UserModel.RequiredAction;
-import org.keycloak.models.RoleModel;
 import org.keycloak.protocol.oidc.utils.RedirectUtils;
 import org.keycloak.representations.AccessToken;
 import org.keycloak.services.ErrorResponse;
@@ -40,9 +40,12 @@ import org.keycloak.services.managers.AppAuthManager;
 import org.keycloak.services.managers.AuthenticationManager;
 import org.keycloak.services.managers.RealmManager;
 import org.keycloak.services.resources.admin.AdminAuth;
+import org.keycloak.services.resources.admin.fgap.AdminPermissionEvaluator;
+import org.keycloak.services.resources.admin.fgap.AdminPermissions;
 
 import org.keycloak.models.RequiredActionProviderModel;
 import java.util.stream.Collectors;
+// import java.util.List;
 
 import com.google.gson.Gson;
 
@@ -51,6 +54,8 @@ public class ActionsTokenResource {
     private final KeycloakSession session;
 
     private final static Logger logger = Logger.getLogger(ActionsTokenResource.class);
+
+    private AdminPermissionEvaluator realmAuth;
 
     public ActionsTokenResource(KeycloakSession session) {
         this.session = session;
@@ -64,6 +69,7 @@ public class ActionsTokenResource {
     public Response getActionToken(
             String jsonString) {
         KeycloakContext context = session.getContext();
+        //pull uriInfor from active context (in case behind proxy)
         UriInfo uriInfo = context.getUri();
         RealmModel realm = session.getContext().getRealm();
 
@@ -78,6 +84,8 @@ public class ActionsTokenResource {
             throw new ForbiddenException();
         }
 
+        realmAuth = AdminPermissions.evaluator(session, realm, auth);
+
         session.getContext().setRealm(realm);
 
         ActionTokenRequest actionTokenRequest = null;
@@ -91,16 +99,11 @@ public class ActionsTokenResource {
 
         UserModel user = session.users().getUserById(realm, actionTokenRequest.userId);
         if (user == null) {
-            // Check if the admin has permission to query users
-            if (!hasRole(auth, "query-users")) {
+            // we do this to make sure somebody can't phish ids
+            if (realmAuth.users().canQuery())
+                throw new NotFoundException("User not found");
+            else
                 throw new ForbiddenException();
-            }
-            throw new NotFoundException("User not found");
-        }
-
-        // Check if the admin has permission to manage the user
-        if (!hasRole(auth, "manage-users")) {
-            throw new ForbiddenException();
         }
 
         // Fetch all registered required actions in the realm
@@ -108,7 +111,8 @@ public class ActionsTokenResource {
                 .map(RequiredActionProviderModel::getAlias)
                 .collect(Collectors.toList());
 
-        List<String> requiredActions = new LinkedList<>();
+        // Can parameterize this as well
+        List<String> requiredActions = new LinkedList<String>();
 
         // Validate the required actions from the request
         for (String requiredActionName : actionTokenRequest.actions) {
@@ -116,9 +120,10 @@ public class ActionsTokenResource {
                 throw new WebApplicationException(
                         ErrorResponse.error("Invalid requiredAction: " + requiredActionName, Status.BAD_REQUEST));
             }
-            requiredActions.add(requiredActionName);
+            requiredActions.add(requiredActionName); // Add the validated action to the list
         }
 
+        realmAuth.users().requireManage(user);
         // Make sure the user has an email address
         String userEmail = user.getEmail();
         if (requiredActions.contains(RequiredAction.VERIFY_EMAIL.name()) && userEmail == null) {
@@ -145,6 +150,8 @@ public class ActionsTokenResource {
                 && actionTokenRequest.redirectUriValidate)
             assertValidRedirectUri(actionTokenRequest.redirectUri, client);
 
+        // /auth/admin/master/console/#/realms/master/token-settings User-Initiated
+        // Action Lifespan
         int validityInSecs = context.getRealm().getActionTokenGeneratedByAdminLifespan();
         if (actionTokenRequest.lifespan != null)
             validityInSecs = actionTokenRequest.lifespan;
@@ -172,18 +179,6 @@ public class ActionsTokenResource {
         ActionToken actionToken = new ActionToken(tokenKey);
         String jsonInString = gson.toJson(actionToken);
         return Response.status(200).entity(jsonInString).build();
-    }
-
-    private boolean hasRole(AdminAuth auth, String roleName) {
-        ClientModel realmManagementClient = session.getContext().getRealm().getClientByClientId("realm-management");
-        if (realmManagementClient == null) {
-            return false;
-        }
-        RoleModel role = session.roles().getClientRole(realmManagementClient, roleName);
-        if (role == null) {
-            return false;
-        }
-        return auth.getUser().hasRole(role);
     }
 
     private void assertValidRedirectUri(String redirectUri, ClientModel client) {
@@ -243,6 +238,7 @@ public class ActionsTokenResource {
         ClientModel client = realm.getClientByClientId(token.getIssuedFor());
         if (client == null) {
             throw new NotFoundException("Could not find client for authorization");
+
         }
 
         return new AdminAuth(realm, authResult.getToken(), authResult.getUser(), client);
